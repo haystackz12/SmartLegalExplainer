@@ -1,5 +1,5 @@
 streamlit
-PyMuPDF==1.23.2 # or the version you have installed
+PyMuPDF==1.24.0 # Changed from 1.23.2
 openai==1.35.13 # or the version you have installed
 python-dotenv
 python-docx
