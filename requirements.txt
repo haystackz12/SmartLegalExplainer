@@ -1,0 +1,9 @@
+streamlit
+PyMuPDF==1.23.2 # or the version you have installed
+openai==1.35.13 # or the version you have installed
+python-dotenv
+python-docx
+pytesseract
+pdf2image
+Pillow
+reportlab

@@ -1,0 +1,19 @@
+# Environment variables file (contains API keys)
+.env
+
+# Python virtual environment directory
+venv/
+env/
+.Python/
+
+# Python bytecode files
+__pycache__/
+*.pyc
+
+# Streamlit specific local files
+.streamlit/secrets.toml
+.streamlit/local_config.toml
+
+# Operating System generated files
+.DS_Store # macOS
+Thumbs.db # Windows
