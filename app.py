@@ -1,11 +1,11 @@
 import streamlit as st
-import fitz  # PyMuPDF
+# import fitz  # PyMuPDF - Temporarily disabled for deployment stability
 import openai
 import os
 from dotenv import load_dotenv
 from docx import Document
-import pytesseract
-from pdf2image import convert_from_bytes
+# import pytesseract - Temporarily disabled for deployment stability
+# from pdf2image import convert_from_bytes - Temporarily disabled for deployment stability
 from PIL import Image
 from io import BytesIO # For handling file-like objects for downloads
 from reportlab.lib.pagesizes import letter
@@ -147,7 +147,7 @@ with st.expander("💡 How to Use This Application & Section Guide"):
     Welcome to the Smart Legal Doc Explainer! This tool helps you understand complex legal documents quickly and efficiently.
 
     **Here's how to use it:**
-    1.  **Upload Your Document:** Use the file uploader to select your legal document (PDF, DOCX, or TXT). If it's a scanned PDF, check the 'Force OCR' option for better text extraction.
+    1.  **Upload Your Document:** Use the file uploader to select your legal document (PDF, DOCX, or TXT). **Note: PDF processing is temporarily disabled due to deployment challenges.**
     2.  **Review Extracted Content & Detailed Insights:** The left column displays the full document text and provides tools for detailed analysis like Q&A, entity extraction, and clause explanations.
     3.  **Explore Overall AI Insights:** The right column offers high-level summaries, risk analysis, and document comparison, now organized into convenient tabs.
     4.  **Customize AI:** Use the sidebar on the left to provide custom instructions or define the AI's persona for all analyses.
@@ -160,7 +160,7 @@ with st.expander("💡 How to Use This Application & Section Guide"):
 
     * **1. Upload Your Document:**
         * **Purpose:** Where you provide the legal document for analysis.
-        * **Features:** File uploader for PDF, DOCX, TXT; checkbox for Optical Character Recognition (OCR) for scanned PDFs; **NEW: "Clear Document & Start Over" button.**
+        * **Features:** File uploader for PDF, DOCX, TXT; checkbox for Optical Character Recognition (OCR) for scanned PDFs (currently ineffective for PDFs). **NEW: "Clear Document & Start Over" button.**
 
     * **2. Extracted Document Content & Detailed Insights (Left Column):**
         * **Purpose:** Displays the raw text and provides tools for in-depth analysis of specific parts or aspects of the document.
@@ -219,8 +219,8 @@ if 'clause_select_tab' not in st.session_state: st.session_state.clause_select_t
 if 'compare_input_tab' not in st.session_state: st.session_state.compare_input_tab = ""
 
 # --- File Uploader Widget (Moved to ensure it's always defined) ---
-uploaded_file = st.file_uploader("Choose a legal document", type=["pdf", "docx", "txt"], key="main_file_uploader")
-use_ocr = st.checkbox("Force Optical Character Recognition (OCR) for scanned PDFs (may take longer)")
+uploaded_file = st.file_uploader("Choose a legal document (.docx, .txt only for now)", type=["docx", "txt"], key="main_file_uploader")
+# use_ocr = st.checkbox("Force Optical Character Recognition (OCR) for scanned PDFs (currently disabled)") # Removed checkbox as PDFs are disabled
 
 
 # Logic to handle new file upload vs. existing file in session state
@@ -231,27 +231,9 @@ if uploaded_file and (st.session_state.uploaded_file_name is None or st.session_
     processed_text = ""
 
     with st.spinner("Processing document..."):
-        if file_type == "pdf":
-            if use_ocr:
-                try:
-                    images = convert_from_bytes(uploaded_file.read())
-                    text_list = []
-                    for i, img in enumerate(images):
-                        text_list.append(pytesseract.image_to_string(img))
-                    processed_text = "\n".join(text_list)
-                    st.success("OCR completed successfully!")
-                except Exception as e:
-                    st.error(f"OCR failed. Please ensure Tesseract and Poppler are correctly installed and configured. Error: {e}")
-                    st.info("You can try unchecking 'Force OCR' if it's a searchable PDF.")
-            else:
-                try:
-                    doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-                    for page in doc:
-                        processed_text += page.get_text()
-                    st.success("Text extracted from PDF.")
-                except Exception as e:
-                    st.error(f"Failed to extract text from PDF. It might be a scanned document. Try checking 'Force OCR'. Error: {e}")
-
+        if file_type == "pdf": # This block will now effectively be skipped
+            st.warning("PDF processing is temporarily disabled due to deployment challenges. Please upload a .docx or .txt file.")
+            processed_text = "" # Ensure no text is processed from PDF
         elif file_type == "docx":
             try:
                 doc = Document(uploaded_file)
@@ -287,12 +269,8 @@ if uploaded_file and (st.session_state.uploaded_file_name is None or st.session_
 
 
 elif st.session_state.uploaded_file_name and uploaded_file is None:
-    # This case handles when a file was previously uploaded (and stored in session_state)
-    # but the user has now cleared the file uploader widget.
-    # In this scenario, we want to keep the full_text from session_state until the clear button is pressed.
     pass
 else:
-    # No file uploaded yet, or file is the same as before, and not explicitly cleared.
     pass
 
 full_text = st.session_state.full_text # Use text from session state

@@ -1,9 +1,6 @@
 streamlit
-PyMuPDF==1.24.0 # Changed from 1.23.2
-openai==1.35.13 # or the version you have installed
+openai==1.35.13 # Or your specific version
 python-dotenv
 python-docx
-pytesseract
-pdf2image
-Pillow
 reportlab
+Pillow
