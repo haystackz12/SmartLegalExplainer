@@ -11,10 +11,26 @@ from io import BytesIO # For handling file-like objects for downloads
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
+import sys # Import sys to exit if key is missing
 
-# Load API key from .env file
+# Load API key from .env file (for local development)
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+# --- CRITICAL DEBUGGING STEP ---
+# This will explicitly check the API key and print a clear message to logs.
+# If the key is missing, it will stop the app with a clear error.
+if not OPENAI_API_KEY:
+    st.error("ERROR: OpenAI API key is missing! Please set it in Streamlit Cloud secrets.")
+    st.info("Go to your app on share.streamlit.io -> 'Settings' -> 'Secrets' and add OPENAI_API_KEY='your_key_here'")
+    # For local testing, you might want to comment out sys.exit()
+    # For deployment, sys.exit() ensures the app doesn't crash with a redacted error.
+    sys.exit("OpenAI API key not found. Exiting application.")
+else:
+    st.sidebar.success("OpenAI API Key Loaded (first 5 chars: " + OPENAI_API_KEY[:5] + "...)")
+    # You can also print to the actual logs for more detail (not shown on UI)
+    print(f"DEBUG: API Key successfully loaded. Length: {len(OPENAI_API_KEY)}, Starts with: {OPENAI_API_KEY[:5]}...")
+
 
 # Initialize the OpenAI client
 client = openai.OpenAI(api_key=OPENAI_API_KEY)
@@ -241,7 +257,7 @@ if uploaded_file and (st.session_state.uploaded_file_name is None or st.session_
                     processed_text = "\n".join(text_list)
                     st.success("OCR completed successfully!")
                 except Exception as e:
-                    st.error(f"OCR failed. Please ensure Tesseract and Poppler are correctly installed and configured. Error: {e}")
+                    st.error(f"OCR failed: {e}. Please ensure Tesseract and Poppler are correctly installed and configured.")
                     st.info("You can try unchecking 'Force OCR' if it's a searchable PDF.")
             else:
                 try:
@@ -250,7 +266,7 @@ if uploaded_file and (st.session_state.uploaded_file_name is None or st.session_
                         processed_text += page.get_text()
                     st.success("Text extracted from PDF.")
                 except Exception as e:
-                    st.error(f"Failed to extract text from PDF. It might be a scanned document. Try checking 'Force OCR'. Error: {e}")
+                    st.error(f"Failed to extract text from PDF: {e}. It might be a scanned document. Try checking 'Force OCR'.")
 
         elif file_type == "docx":
             try:
@@ -258,14 +274,14 @@ if uploaded_file and (st.session_state.uploaded_file_name is None or st.session_
                 processed_text = "\n".join([p.text for p in doc.paragraphs])
                 st.success("Text extracted from DOCX.")
             except Exception as e:
-                st.error(f"Failed to process DOCX file. Error: {e}")
+                st.error(f"Failed to process DOCX file: {e}")
 
         elif file_type == "txt":
             try:
                 processed_text = uploaded_file.read().decode("utf-8")
                 st.success("Text extracted from TXT.")
             except Exception as e:
-                st.error(f"Failed to read TXT file. Ensure it's a valid UTF-8 text file. Error: {e}")
+                st.error(f"Failed to read TXT file: {e}. Ensure it's a valid UTF-8 text file.")
     st.session_state.full_text = processed_text # Store processed text in session state
     # Clear all AI results when a new file is uploaded
     st.session_state.summary_result = ""
@@ -406,10 +422,17 @@ Answer:
                 if not clauses:
                     st.warning("No substantial clauses (paragraphs longer than 50 characters) were found for individual explanation.")
                 else:
+                    # Set default value for selectbox only if it's not already set or if full_text changes
                     # Ensure the default index is valid for the current list of clauses
                     current_clause_index = 0
-                    if st.session_state.clause_select_tab in clauses:
+                    if 'clause_select_tab' in st.session_state and st.session_state.clause_select_tab in clauses:
                         current_clause_index = clauses.index(st.session_state.clause_select_tab)
+                    # If the previous selected clause is no longer in the list (e.g., after a clear),
+                    # default to the first clause if available, otherwise 0.
+                    elif clauses:
+                        current_clause_index = 0
+                    else:
+                        current_clause_index = 0 # No clauses, index 0 is safe but won't display a selectbox
 
                     selected_clause = st.selectbox("Select a clause to explain in plain English:", clauses, key="clause_select_tab", index=current_clause_index)
                     
@@ -848,206 +871,4 @@ Analysis:
                             st.success("Risk and Opportunity Analysis Complete!")
                         except openai.APIError as e:
                             st.error(f"OpenAI API Error: {e.status_code} - {e.response}")
-                            st.info("Please check your API key and network connection.")
-                            st.session_state.risk_opportunity_result = "" # Clear result on error
-                        except Exception as e:
-                            st.error(f"An unexpected error occurred during analysis: {e}")
-                            st.session_state.risk_opportunity_result = "" # Clear result on error
-                
-                if st.session_state.risk_opportunity_result:
-                    st.markdown(st.session_state.risk_opportunity_result)
-                    col_risk_dl1, col_risk_dl2 = st.columns(2)
-                    with col_risk_dl1:
-                        st.download_button(
-                            label="Download Analysis (TXT)",
-                            data=st.session_state.risk_opportunity_result,
-                            file_name="risk_opportunity_analysis.txt",
-                            mime="text/plain",
-                            key="download_risk_txt_tab"
-                        )
-                    with col_risk_dl2:
-                        st.download_button(
-                            label="Download Analysis (PDF)",
-                            data=create_pdf(st.session_state.risk_opportunity_result, "Risk & Opportunity Analysis"),
-                            file_name="risk_opportunity_analysis.pdf",
-                            mime="application/pdf",
-                            key="download_risk_pdf_tab"
-                        )
-
-            with tab_comparison:
-                st.subheader("🔄 Document Comparison (Paste Second Document)")
-                # Use value from session state for text area
-                second_doc_text = st.text_area("Paste the text of the second document here for comparison:", height=300, key="compare_input_tab", value=st.session_state.compare_input_tab)
-                if st.button("Compare Documents", key="compare_button_tab") and second_doc_text:
-                    with st.spinner("Comparing documents..."):
-                        comparison_prompt = f"""
-{custom_ai_instruction}
-You are comparing two legal documents. Identify the key differences and similarities between 'Document A' and 'Document B'.
-Focus on major changes, additions, deletions, or significant variations in terms.
-
-Document A:
----
-{full_text}
----
-
-Document B:
----
-{second_doc_text}
----
-
-Comparison (Differences and Similarities):
-"""
-                        try:
-                            response = client.chat.completions.create(
-                                model="gpt-4o",
-                                messages=[
-                                    {"role": "system", "content": custom_ai_instruction},
-                                    {"role": "user", "content": comparison_prompt}
-                                ],
-                                temperature=0.7,
-                                max_tokens=1000
-                            )
-                            st.session_state.comparison_result = response.choices[0].message.content.strip()
-                            st.success("Documents Compared!")
-                        except openai.APIError as e:
-                            st.error(f"OpenAI API Error: {e.status_code} - {e.response}")
-                            st.info("Please check your API key and network connection.")
-                            st.session_state.comparison_result = "" # Clear result on error
-                        except Exception as e:
-                            st.error(f"An unexpected error occurred during document comparison: {e}")
-                            st.session_state.comparison_result = "" # Clear result on error
-                
-                if st.session_state.comparison_result:
-                    st.markdown(st.session_state.comparison_result)
-                    col_compare_dl1, col_compare_dl2 = st.columns(2)
-                    with col_compare_dl1:
-                        st.download_button(
-                            label="Download Comparison (TXT)",
-                            data=st.session_state.comparison_result,
-                            file_name="document_comparison.txt",
-                            mime="text/plain",
-                            key="download_compare_txt_tab"
-                        )
-                    with col_compare_dl2:
-                        st.download_button(
-                            label="Download Comparison (PDF)",
-                            data=create_pdf(st.session_state.comparison_result, "Document Comparison"),
-                            file_name="document_comparison.pdf",
-                            mime="application/pdf",
-                            key="download_compare_pdf_tab"
-                        )
-
-            with tab_context:
-                st.subheader("🌍 Jurisdiction & Governing Law")
-                if st.button("Identify Governing Law", key="identify_law_button_tab"):
-                    with st.spinner("Identifying governing law..."):
-                        jurisdiction_prompt = f"""
-{custom_ai_instruction}
-From the following legal document, identify the stated governing law or jurisdiction.
-If found, briefly explain what this means in the context of the document.
-
-Legal Document:
----
-{full_text}
----
-
-Governing Law Analysis:
-"""
-                        try:
-                            response = client.chat.completions.create(
-                                model="gpt-4o",
-                                messages=[
-                                    {"role": "system", "content": custom_ai_instruction},
-                                    {"role": "user", "content": jurisdiction_prompt}
-                                ],
-                                temperature=0.3,
-                                max_tokens=400
-                            )
-                            st.session_state.jurisdiction_result = response.choices[0].message.content.strip()
-                            st.success("Governing Law Identified!")
-                        except openai.APIError as e:
-                            st.error(f"OpenAI API Error: {e.status_code} - {e.response}")
-                            st.info("Please check your API key and network connection.")
-                            st.session_state.jurisdiction_result = "" # Clear result on error
-                        except Exception as e:
-                            st.error(f"An unexpected error occurred during jurisdiction identification: {e}")
-                            st.session_state.jurisdiction_result = "" # Clear result on error
-                
-                if st.session_state.jurisdiction_result:
-                    st.markdown(st.session_state.jurisdiction_result)
-                    col_jurisdiction_dl1, col_jurisdiction_dl2 = st.columns(2)
-                    with col_jurisdiction_dl1:
-                        st.download_button(
-                            label="Download Law (TXT)",
-                            data=st.session_state.jurisdiction_result,
-                            file_name="governing_law.txt",
-                            mime="text/plain",
-                            key="download_law_txt_tab"
-                        )
-                    with col_jurisdiction_dl2:
-                        st.download_button(
-                            label="Download Law (PDF)",
-                            data=create_pdf(st.session_state.jurisdiction_result, "Governing Law Analysis"),
-                            file_name="governing_law.pdf",
-                            mime="application/pdf",
-                            key="download_law_pdf_tab"
-                        )
-
-                st.subheader("😊 Sentiment Analysis")
-                if st.button("Analyze Document Sentiment", key="analyze_sentiment_button_tab"):
-                    with st.spinner("Analyzing document sentiment..."):
-                        sentiment_prompt = f"""
-{custom_ai_instruction}
-Analyze the overall sentiment or tone of the following legal document.
-Identify any sections with particularly strong, contentious, or cautious language.
-Provide a brief summary of the document's legal sentiment.
-
-Legal Document:
----
-{full_text}
----
-
-Sentiment Analysis:
-"""
-                        try:
-                            response = client.chat.completions.create(
-                                model="gpt-4o",
-                                messages=[
-                                    {"role": "system", "content": custom_ai_instruction},
-                                    {"role": "user", "content": sentiment_prompt}
-                                ],
-                                temperature=0.5,
-                                max_tokens=500
-                            )
-                            st.session_state.sentiment_result = response.choices[0].message.content.strip()
-                            st.success("Sentiment Analysis Complete!")
-                        except openai.APIError as e:
-                            st.error(f"OpenAI API Error: {e.status_code} - {e.response}")
-                            st.info("Please check your API key and network connection.")
-                            st.session_state.sentiment_result = "" # Clear result on error
-                        except Exception as e:
-                            st.error(f"An unexpected error occurred during sentiment analysis: {e}")
-                            st.session_state.sentiment_result = "" # Clear result on error
-                
-                if st.session_state.sentiment_result:
-                    st.markdown(st.session_state.sentiment_result)
-                    col_sentiment_dl1, col_sentiment_dl2 = st.columns(2)
-                    with col_sentiment_dl1:
-                        st.download_button(
-                            label="Download Sentiment (TXT)",
-                            data=st.session_state.sentiment_result,
-                            file_name="document_sentiment.txt",
-                            mime="text/plain",
-                            key="download_sentiment_txt_tab"
-                        )
-                    with col_sentiment_dl2:
-                        st.download_button(
-                            label="Download Sentiment (PDF)",
-                            data=create_pdf(st.session_state.sentiment_result, "Document Sentiment Analysis"),
-                            file_name="document_sentiment.pdf",
-                            mime="application/pdf",
-                            key="download_sentiment_pdf_tab"
-                        )
-
-else:
-    st.info("Upload a document to begin. Once uploaded, you'll see options for summaries, Q&A, and various other legal insights.")
+                            st.info("Please check your API key and network connection
